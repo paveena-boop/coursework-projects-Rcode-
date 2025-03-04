@@ -1,0 +1,111 @@
+#install.packages 
+install.packages("tidyverse")
+install.packages("readr")
+install.packages("car")
+install.packages("caret")
+install.packages("corrplot")
+install.packages("GGally")
+install.packages("MASS")
+install.packages("arm")
+library(tidyverse)
+library(readr)
+library(car)
+library(caret)
+library(corrplot)
+library(GGally)
+library(MASS)
+library(arm)
+
+#load Q2 dataset - `diabetes24.csv` 
+diabetes_data <- read_csv("diabetes24.csv")
+
+#evaluate data
+colSums(is.na(diabetes_data)) #check for missing values in the data set - 0 missing values
+summary(diabetes_data) #general descriptive sumary of the variables
+str(diabetes_data) #
+glimpse(diabetes_data) #
+
+#individual evaluation of the six explanatory variables 
+summary(glm(Diabetes ~ Age, data = diabetes_data, family = binomial))
+summary(glm(Diabetes ~ BMI, data = diabetes_data, family = binomial))
+summary(glm(Diabetes ~ BloodPressure, data = diabetes_data, family = binomial))
+summary(glm(Diabetes ~ Glucose, data = diabetes_data, family = binomial))
+summary(glm(Diabetes ~ Smoker, data = diabetes_data, family = binomial))
+summary(glm(Diabetes ~ HighChol, data = diabetes_data, family = binomial))
+
+
+#convert dichotomous variables into dummy(factor) variables with labels 
+diabetes_data <- diabetes_data %>%
+  mutate(
+    Smoker = factor(Smoker, levels = c("0", "1"), labels = c("Non-Smoker", "Smoker")),
+    HighChol = factor(HighChol, levels = c("0", "1"), labels = c("No", "Yes")),
+    Diabetes = factor(Diabetes, levels = c("0", "1"), labels = c("No Diabetes", "Diabetes"))
+  )
+
+#Explanatory data analysis - correlational matrix 
+GGally::ggpairs(diabetes_data)
+
+#split dataset to train and test (80:20)
+set.seed(123)
+split_idx = sample(nrow(diabetes_data), 56)
+diabetes_train <- diabetes_data[split_idx, ]
+diabetes_test <- diabetes_data[-split_idx, ]
+
+#summarise split test
+summary(as.factor(diabetes_train$Diabetes))
+summary(diabetes_train)
+glimpse(diabetes_train)
+
+summary (diabetes_test)
+glimpse(diabetes_test)
+
+#fit full model - logistic regression
+model1 <- glm(Diabetes ~ Age + BMI + BloodPressure + Glucose + Smoker + HighChol, data = diabetes_train, family = binomial(logit))
+summary(model1)
+round(exp(coef(model1)), 4)
+
+#check for multicollinearity 
+vif(model1)
+
+#calculate G-statistic to evaluate the  significance 
+G_calc <- model1$null.deviance - model1$deviance
+Gdf <- model1$df.null - model1$df.residual
+pscl::pR2(model1)
+G_calc
+qchisq(.95, df = Gdf) 
+1 - pchisq(G_calc, Gdf)
+anova(model1, test = "Chisq")
+
+#calculate G-statistic to evaluate the  significance 
+G_calc1 <- final_model$null.deviance - final_model$deviance
+Gdf1 <- model1$df.null - final_model$df.residual
+pscl::pR2(final_model)
+G_calc1
+qchisq(.95, df = Gdf1) 
+1 - pchisq(G_calc1, Gdf1)
+anova(final_model, test = "Chisq")
+
+#apply step-wise regression to determine best fit model 
+model2 <- step(model1, direction = "both")
+
+#fit the final model
+final_model <- glm(Diabetes ~ Age + BMI + HighChol, data = diabetes_train, family = binomial(logit))
+summary(final_model)
+round(exp(coef(final_model)), 4)
+
+#cross-validate model selection
+set.seed(123)
+cv_results <- train(Diabetes ~ Age + BMI + HighChol, 
+                    data = diabetes_data,
+                    method = "glm",
+                    family = "binomial",
+                    trControl = trainControl(method = "cv", number = 10))
+cv_results
+
+resamples <- cv_results$results
+print(resamples)
+
+#predict probabilities for the test split 
+predictions <- predict(final_model, diabetes_test, type = "response")
+predicted_class <- ifelse(predictions > 0.5, "Diabetes", "No Diabetes")
+confusionMatrix(as.factor(predicted_class), as.factor(diabetes_test$Diabetes))
