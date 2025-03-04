@@ -1,0 +1,72 @@
+#install packages 
+install.packages("tidyverse")
+install.packages("GGally")
+install.packages("MASS")
+install.packages("car")
+library(tidyverse)
+library(GGally)
+library(MASS)
+library(car)
+
+#retreive dataset
+data <- read_csv("holiday_data.csv")
+
+#identify variables in dataset
+attach(data)
+head(data)
+
+#summarize data
+str(data)
+summary(data)
+
+#convert categorical variable to factor variables 
+data <- data %>%
+  mutate(across(c(type, t_of_y, gender, region, emp_stat), as.factor)) #correct for corresponding labels
+
+#recheck the status of the variables 
+str(data)
+
+#individually evaluate each variable 
+summary(lm(price ~ age, data = data))
+summary(lm(price ~ gender, data = data))
+summary(lm(price ~ n_nights, data = data))
+summary(lm(price ~ type, data = data))
+summary(lm(price ~ t_of_y, data = data))
+summary(lm(price ~ income, data = data))
+summary(lm(price ~ region, data = data))
+summary(lm(price ~ emp_stat, data = data))
+
+# Check for missing values
+sum(is.na(data))
+
+#check relationship 
+ggpairs(data = data)
+
+#initial test for multicollinearity 
+vif(full_model)
+
+#Full multiple linear regression model
+full_model <- lm(price ~ n_nights + type + t_of_y + age + income + gender + region + emp_stat, 
+                 data = data)
+
+#Summarize the model
+summary(full_model)
+
+#Stepwise regression for variable selection - use this if You are primarily interested in finding a parsimonious model that balances fit and simplicity.
+fit <- lm(price ~ n_nights + type + t_of_y + age + income + gender + region + emp_stat, data=data)
+step <- stepAIC(fit, direction="both")
+
+# display results
+step$anova 
+
+#Preferred model 
+model <- lm(price ~ n_nights + type + age + gender, data = data)
+summary(model)
+
+#compare the two models 
+anova(full_model, model, test="Chi")
+
+#Test for multicollinearity - to determine what method backward or stepwise (Multicollinearity is low (check VIF values before applying) - for backward
+vif(full_model)
+vif(model)
+
